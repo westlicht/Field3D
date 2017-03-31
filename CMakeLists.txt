@@ -215,6 +215,27 @@ ADD_EXECUTABLE ( f3dinfo
 
 TARGET_LINK_LIBRARIES ( f3dinfo ${Field3D_BIN_Libraries} )
 
+# field3d - f3dmakemip
+ADD_EXECUTABLE ( f3dmakemip
+  apps/f3dmakemip/main.cpp
+  )
+
+TARGET_LINK_LIBRARIES ( f3dmakemip ${Field3D_BIN_Libraries} )
+
+# field3d - f3dmerge
+ADD_EXECUTABLE ( f3dmerge
+  apps/f3dmerge/main.cpp
+  )
+
+TARGET_LINK_LIBRARIES ( f3dmerge ${Field3D_BIN_Libraries} )
+
+# field3d - f3dsample
+ADD_EXECUTABLE ( f3dsample
+  apps/f3dsample/main.cpp
+  )
+
+TARGET_LINK_LIBRARIES ( f3dsample ${Field3D_BIN_Libraries} )
+
 # field3d - sparse_field_io
 ADD_EXECUTABLE ( sparse_field_io
   apps/sample_code/sparse_field_io/main.cpp
@@ -273,3 +294,14 @@ INSTALL ( TARGETS f3dinfo
   RUNTIME DESTINATION bin
 )
 
+INSTALL ( TARGETS f3dmakemip 
+  RUNTIME DESTINATION bin
+)
+
+INSTALL ( TARGETS f3dmerge 
+  RUNTIME DESTINATION bin
+)
+
+INSTALL ( TARGETS f3dsample 
+  RUNTIME DESTINATION bin
+)
