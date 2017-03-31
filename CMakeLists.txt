@@ -123,6 +123,7 @@ ADD_LIBRARY ( Field3D ${LIB_TYPE}
   src/MACFieldIO.cpp
   src/MIPFieldIO.cpp
   src/MIPUtil.cpp
+  src/MinMaxUtil.cpp
   src/OArchive.cpp
   src/OData.cpp
   src/OgIGroup.cpp
