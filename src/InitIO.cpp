@@ -48,6 +48,7 @@
 #include "MACFieldIO.h"
 #include "FieldMappingIO.h"
 #include "MIPFieldIO.h"
+#include "Encryption.h"
 
 //----------------------------------------------------------------------------//
 
@@ -78,6 +79,10 @@ void initIO()
   factory.registerFieldMappingIO(NullFieldMappingIO::create);
   factory.registerFieldMappingIO(MatrixFieldMappingIO::create);
   factory.registerFieldMappingIO(FrustumFieldMappingIO::create);
+
+  // default decryption settings
+  Encryption::decryptSettings.enabled = true;
+  Encryption::decryptSettings.password = "secret";
 }
 
 //----------------------------------------------------------------------------//

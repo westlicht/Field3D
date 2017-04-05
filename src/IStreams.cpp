@@ -95,7 +95,40 @@ public:
 IStreams::IStreams(const std::string & iFileName, std::size_t iNumStreams) :
     mData(new IStreams::PrivateData())
 {
-    if (Encryption::decryptSettings.enabled) {
+    bool tryDecrypt = false;
+    std::ifstream *filestream = new std::ifstream;
+    filestream->open(iFileName.c_str(), std::ios::binary);
+
+    if (filestream->is_open())
+    {
+        mData->fileName = iFileName;
+    }
+    else
+    {
+        delete filestream;
+        return;
+    }
+
+    mData->streams.push_back(filestream);
+    init();
+    if (!mData->valid || mData->version != 1)
+    {
+        mData->streams.clear();
+        filestream->close();
+        delete filestream;
+        tryDecrypt = true;
+    }
+    else
+    {
+        // we are valid, so we'll allocate (but not open) the others
+        mData->streams.resize(iNumStreams, NULL);
+        mData->offsets.resize(iNumStreams, 0);
+    }
+    mData->locks = new Alembic::Util::mutex[mData->streams.size()];
+
+    if (tryDecrypt && Encryption::decryptSettings.enabled) {
+        mData.reset(new IStreams::PrivateData());
+        
         // read encrypted data
         std::ifstream ifs(iFileName.c_str(), std::ios::in | std::ios::binary);
         auto p = ifs.tellg();
@@ -129,36 +162,6 @@ IStreams::IStreams(const std::string & iFileName, std::size_t iNumStreams) :
         {
             mData->streams.clear();
             delete stream;
-        }
-        else
-        {
-            // we are valid, so we'll allocate (but not open) the others
-            mData->streams.resize(iNumStreams, NULL);
-            mData->offsets.resize(iNumStreams, 0);
-        }
-        mData->locks = new Alembic::Util::mutex[mData->streams.size()];
-
-    } else {
-        std::ifstream *filestream = new std::ifstream;
-        filestream->open(iFileName.c_str(), std::ios::binary);
-
-        if (filestream->is_open())
-        {
-            mData->fileName = iFileName;
-        }
-        else
-        {
-            delete filestream;
-            return;
-        }
-
-        mData->streams.push_back(filestream);
-        init();
-        if (!mData->valid || mData->version != 1)
-        {
-            mData->streams.clear();
-            filestream->close();
-            delete filestream;
         }
         else
         {
