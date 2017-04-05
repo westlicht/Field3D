@@ -37,7 +37,20 @@ PROJECT ( field3d )
 
 set( CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake )
 
-FIND_PACKAGE (Doxygen)
+# C++11
+if(CMAKE_HOST_UNIX)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+  if (APPLE)
+    # Try to auto-detect a suitable SDK
+    execute_process(COMMAND bash -c "xcodebuild -version -sdk | grep MacOSX | grep Path | head -n 1 | cut -f 2 -d ' '" OUTPUT_VARIABLE CMAKE_OSX_SYSROOT)
+    string(REGEX REPLACE "(\r?\n)+$" "" CMAKE_OSX_SYSROOT "${CMAKE_OSX_SYSROOT}")
+    string(REGEX REPLACE "^.*X([0-9.]*).sdk$" "\\1" CMAKE_OSX_DEPLOYMENT_TARGET "${CMAKE_OSX_SYSROOT}")
+  endif()
+endif()
+
+
+# FIND_PACKAGE (Doxygen)
 FIND_PACKAGE (HDF5)
 IF ( CMAKE_HOST_WIN32 )
 # f3dinfo relies on program_options but don't include it, since
@@ -45,11 +58,12 @@ IF ( CMAKE_HOST_WIN32 )
 # forced via a pragma.
 FIND_PACKAGE (Boost COMPONENTS regex thread)
 ELSE ()
-FIND_PACKAGE (Boost COMPONENTS regex thread program_options system)
+FIND_PACKAGE (Boost COMPONENTS regex thread program_options system iostreams)
 FIND_PACKAGE (MPI)
 ENDIF ()
 
 FIND_PACKAGE (ILMBase)
+FIND_PACKAGE (Themis REQUIRED)
 
 # Allow the developer to select if Dynamic or Static libraries are built
 OPTION (BUILD_SHARED_LIBS "Build Shared Libraries" ON)
@@ -66,6 +80,7 @@ INCLUDE_DIRECTORIES ( src )
 INCLUDE_DIRECTORIES ( export )
 INCLUDE_DIRECTORIES ( include )
 INCLUDE_DIRECTORIES ( ${ILMBASE_INCLUDE_DIRS} )
+INCLUDE_DIRECTORIES ( ${Themis_INCLUDE_DIRS} )
 INCLUDE_DIRECTORIES ( ${HDF5_INCLUDE_DIRS} )
 INCLUDE_DIRECTORIES ( ${Boost_INCLUDE_DIR} )
 
@@ -73,6 +88,7 @@ INCLUDE_DIRECTORIES ( ${Boost_INCLUDE_DIR} )
 LINK_DIRECTORIES ( ${Boost_LIBRARY_DIRS} )
 LINK_DIRECTORIES ( ${HDF5_LIBRARY_DIRS} )
 LINK_DIRECTORIES ( ${ILMBASE_LIBRARY_DIRS} )
+LINK_DIRECTORIES ( ${Themis_LIBRARY_DIRS} )
 
 IF ( CMAKE_HOST_UNIX )
   ADD_DEFINITIONS ( -fPIC -DREQUIRE_IOSTREAM -Wno-invalid-offsetof )
@@ -104,6 +120,7 @@ ENDIF ( NOT BUILD_SHARED_LIBS )
 ADD_LIBRARY ( Field3D ${LIB_TYPE}
   src/ClassFactory.cpp
   src/DenseFieldIO.cpp
+  src/Encryption.cpp
   src/Field3DFile.cpp
   src/Field3DFileHDF5.cpp
   src/FieldCache.cpp
@@ -140,6 +157,7 @@ ADD_LIBRARY ( Field3D ${LIB_TYPE}
 
 SET ( Field3D_Libraries_Shared
   ${HDF5_LIBRARIES}
+  ${Themis_LIBRARIES}
   )
 
 IF ( CMAKE_HOST_UNIX )

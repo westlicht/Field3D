@@ -34,6 +34,13 @@
 //-*****************************************************************************
 
 #include "IStreams.h"
+#include "Encryption.h"
+
+#include <themispp/secure_cell.hpp>
+
+#include <boost/iostreams/stream.hpp>
+#include <boost/iostreams/device/array.hpp>
+
 #include <fstream>
 #include <stdexcept>
 
@@ -82,40 +89,85 @@ public:
     bool valid;
     bool frozen;
     Alembic::Util::uint16_t version;
+    std::vector<uint8_t> plainData;
 };
 
 IStreams::IStreams(const std::string & iFileName, std::size_t iNumStreams) :
     mData(new IStreams::PrivateData())
 {
+    if (Encryption::decryptSettings.enabled) {
+        // read encrypted data
+        std::ifstream ifs(iFileName.c_str(), std::ios::in | std::ios::binary);
+        auto p = ifs.tellg();
+        ifs.seekg(0, std::ios::end);
+        size_t size = ifs.tellg() - p;
+        ifs.seekg(p);
+        std::vector<uint8_t> encrypted(size);
+        ifs.read(reinterpret_cast<char *>(encrypted.data()), encrypted.size());
+        ifs.close();
 
-    std::ifstream * filestream = new std::ifstream;
-    filestream->open(iFileName.c_str(), std::ios::binary);
+        std::vector<uint8_t> passwordData;
+        const auto &password = Encryption::decryptSettings.password;
+        std::copy(password.begin(), password.end(), std::back_inserter(passwordData));
 
-    if (filestream->is_open())
-    {
-        mData->fileName = iFileName;
-    }
-    else
-    {
-        delete filestream;
-        return;
-    }
+        // decrypt data
+        themispp::secure_cell_seal_t sm(passwordData);
+        mData->plainData = sm.decrypt(encrypted);
 
-    mData->streams.push_back(filestream);
-    init();
-    if (!mData->valid || mData->version != 1)
-    {
-        mData->streams.clear();
-        filestream->close();
-        delete filestream;
+        std::cout << "plain data size " << mData->plainData.size() << std::endl;
+
+        std::ofstream ofs("plain.f3d", std::ios::out | std::ios::binary | std::ios::trunc);
+        ofs.write(reinterpret_cast<const char *>(mData->plainData.data()), mData->plainData.size());
+        ofs.close();
+
+        boost::iostreams::array_source source { reinterpret_cast<const char *>(mData->plainData.data()), mData->plainData.size() };
+        std::istream *stream = new boost::iostreams::stream<boost::iostreams::array_source>(source);
+
+        mData->streams.push_back(stream);
+        init();
+        if (!mData->valid || mData->version != 1)
+        {
+            mData->streams.clear();
+            delete stream;
+        }
+        else
+        {
+            // we are valid, so we'll allocate (but not open) the others
+            mData->streams.resize(iNumStreams, NULL);
+            mData->offsets.resize(iNumStreams, 0);
+        }
+        mData->locks = new Alembic::Util::mutex[mData->streams.size()];
+
+    } else {
+        std::ifstream *filestream = new std::ifstream;
+        filestream->open(iFileName.c_str(), std::ios::binary);
+
+        if (filestream->is_open())
+        {
+            mData->fileName = iFileName;
+        }
+        else
+        {
+            delete filestream;
+            return;
+        }
+
+        mData->streams.push_back(filestream);
+        init();
+        if (!mData->valid || mData->version != 1)
+        {
+            mData->streams.clear();
+            filestream->close();
+            delete filestream;
+        }
+        else
+        {
+            // we are valid, so we'll allocate (but not open) the others
+            mData->streams.resize(iNumStreams, NULL);
+            mData->offsets.resize(iNumStreams, 0);
+        }
+        mData->locks = new Alembic::Util::mutex[mData->streams.size()];
     }
-    else
-    {
-        // we are valid, so we'll allocate (but not open) the others
-        mData->streams.resize(iNumStreams, NULL);
-        mData->offsets.resize(iNumStreams, 0);
-    }
-    mData->locks = new Alembic::Util::mutex[mData->streams.size()];
 }
 
 IStreams::IStreams(const std::vector< std::istream * > & iStreams) :

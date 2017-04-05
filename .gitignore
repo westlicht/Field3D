@@ -2,6 +2,8 @@ build/*
 docs/*
 Field3D/*
 install/*
+CMakeFiles/
+CMakeCache.txt
 
 *.dblite
 *.pyc

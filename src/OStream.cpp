@@ -34,6 +34,10 @@
 //-*****************************************************************************
 
 #include "OStream.h"
+#include "Encryption.h"
+
+#include <themispp/secure_cell.hpp>
+
 #include <fstream>
 #include <stdexcept>
 
@@ -117,6 +121,39 @@ OStream::~OStream()
         char frozen = 0xff;
         mData->stream->seekp(mData->startPos + 5).write(&frozen, 1).flush();
     }
+
+    // Encrypt file if requested
+    if (isValid() && Encryption::encryptSettings.enabled) {
+        // close plain file
+        std::string fileName = mData->fileName;
+        mData.reset();
+
+        std::cout << "encrypting stream" << std::endl;
+        // read plain file to memory
+        std::ifstream ifs(fileName.c_str(), std::ios::in | std::ios::binary);
+        auto p = ifs.tellg();
+        ifs.seekg(0, std::ios::end);
+        size_t size = ifs.tellg() - p;
+        ifs.seekg(p);
+        std::vector<uint8_t> plain(size);
+        ifs.read(reinterpret_cast<char *>(plain.data()), plain.size());
+        ifs.close();
+        std::cout << "plain data size " << size << std::endl;
+
+        // convert password
+        std::vector<uint8_t> passwordData;
+        const auto &password = Encryption::encryptSettings.password;
+        std::copy(password.begin(), password.end(), std::back_inserter(passwordData));
+
+        // encrypt data
+        themispp::secure_cell_seal_t sm(passwordData);
+        auto encrypted = sm.encrypt(plain);
+
+        // write encrypted file
+        std::ofstream ofs(fileName.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
+        ofs.write(reinterpret_cast<const char *>(encrypted.data()), encrypted.size());
+        ofs.close();
+    }    
 }
 
 bool OStream::isValid()

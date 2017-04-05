@@ -850,6 +850,13 @@ private:
 
 };
 
+
+struct Field3DEncryption {
+  static void setEncrypt(bool enabled, const std::string &password);
+  static void setDecrypt(bool enabled, const std::string &password);
+};
+
+
 //----------------------------------------------------------------------------//
 
 FIELD3D_NAMESPACE_HEADER_CLOSE

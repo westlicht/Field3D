@@ -64,6 +64,7 @@
 #include "OgOAttribute.h"
 #include "OgODataset.h"
 #include "OgOGroup.h"
+#include "Encryption.h"
 
 //----------------------------------------------------------------------------//
 
@@ -1919,6 +1920,18 @@ Field3DInputFile::readProxyVectorLayers(const std::string &name) const
   }
   
   return ret;  
+}
+
+//----------------------------------------------------------------------------//
+
+void Field3DEncryption::setEncrypt(bool enabled, const std::string &password) {
+  Encryption::encryptSettings.enabled = enabled;
+  Encryption::encryptSettings.password = password;
+}
+
+void Field3DEncryption::setDecrypt(bool enabled, const std::string &password) {
+  Encryption::decryptSettings.enabled = enabled;
+  Encryption::decryptSettings.password = password;
 }
 
 //----------------------------------------------------------------------------//
