@@ -128,7 +128,6 @@ OStream::~OStream()
         std::string fileName = mData->fileName;
         mData.reset();
 
-        std::cout << "encrypting stream" << std::endl;
         // read plain file to memory
         std::ifstream ifs(fileName.c_str(), std::ios::in | std::ios::binary);
         auto p = ifs.tellg();
@@ -138,7 +137,6 @@ OStream::~OStream()
         std::vector<uint8_t> plain(size);
         ifs.read(reinterpret_cast<char *>(plain.data()), plain.size());
         ifs.close();
-        std::cout << "plain data size " << size << std::endl;
 
         // convert password
         std::vector<uint8_t> passwordData;

@@ -147,12 +147,6 @@ IStreams::IStreams(const std::string & iFileName, std::size_t iNumStreams) :
         themispp::secure_cell_seal_t sm(passwordData);
         mData->plainData = sm.decrypt(encrypted);
 
-        std::cout << "plain data size " << mData->plainData.size() << std::endl;
-
-        std::ofstream ofs("plain.f3d", std::ios::out | std::ios::binary | std::ios::trunc);
-        ofs.write(reinterpret_cast<const char *>(mData->plainData.data()), mData->plainData.size());
-        ofs.close();
-
         boost::iostreams::array_source source { reinterpret_cast<const char *>(mData->plainData.data()), mData->plainData.size() };
         std::istream *stream = new boost::iostreams::stream<boost::iostreams::array_source>(source);
 
