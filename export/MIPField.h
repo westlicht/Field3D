@@ -118,6 +118,7 @@ public:
   typedef boost::intrusive_ptr<MIPField>      Ptr;
   typedef std::vector<Ptr>                    Vec;
 
+  typedef MIPNearestInterp<MIPField<Field_T> > NearestInterp;
   typedef MIPLinearInterp<MIPField<Field_T> > LinearInterp;
   typedef CubicMIPFieldInterp<Data_T>         CubicInterp;
 

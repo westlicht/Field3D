@@ -122,6 +122,65 @@ private:
 FIELD3D_CLASSTYPE_TEMPL_INSTANTIATION(FieldInterp);
 
 //----------------------------------------------------------------------------//
+// NearestFieldInterp
+//----------------------------------------------------------------------------//
+
+/* \class NearestFieldInterp
+   \ingroup field
+   \brief Basic nearest interpolator using voxel access through Field base class
+*/
+
+//----------------------------------------------------------------------------//
+
+template <class Data_T>
+class NearestFieldInterp : public FieldInterp<Data_T>
+{
+ public:
+ 
+  // Typedefs ------------------------------------------------------------------
+
+  typedef Data_T value_type;
+  typedef boost::intrusive_ptr<NearestFieldInterp> Ptr;
+
+  // RTTI replacement ----------------------------------------------------------
+
+  typedef NearestFieldInterp class_type;
+  DEFINE_FIELD_RTTI_CONCRETE_CLASS;
+
+  static const char *staticClassName()
+  {
+    return "NearestFieldInterp";
+  }
+
+  static const char* staticClassType()
+  {
+    return ms_classType.name();
+  }
+
+  // From FieldInterp ----------------------------------------------------------
+
+  virtual Data_T sample(const Field<Data_T> &data, const V3d &vsP) const;
+  
+private:
+
+  // Static data members -------------------------------------------------------
+
+  static TemplatedFieldType<NearestFieldInterp<Data_T> > ms_classType;
+  
+  // Typedefs ------------------------------------------------------------------
+
+  //! Convenience typedef for referring to base class
+  typedef FieldInterp<Data_T> base;    
+
+};
+
+//----------------------------------------------------------------------------//
+// Static data member instantiation
+//----------------------------------------------------------------------------//
+
+FIELD3D_CLASSTYPE_TEMPL_INSTANTIATION(NearestFieldInterp);
+
+//----------------------------------------------------------------------------//
 // LinearFieldInterp
 //----------------------------------------------------------------------------//
 
@@ -237,6 +296,65 @@ private:
 //----------------------------------------------------------------------------//
 
 FIELD3D_CLASSTYPE_TEMPL_INSTANTIATION(CubicFieldInterp);
+
+//----------------------------------------------------------------------------//
+// NearestGenericFieldInterp
+//----------------------------------------------------------------------------//
+
+/* \class NearestGenericFieldInterp
+   \ingroup field
+   \brief Nearest interpolator optimized for fields with a fastValue function 
+*/
+
+//----------------------------------------------------------------------------//
+
+template <class Field_T>
+class NearestGenericFieldInterp : public RefBase
+{
+public:
+  
+  // Typedefs ------------------------------------------------------------------
+
+  typedef typename Field_T::value_type value_type;  
+  typedef boost::intrusive_ptr<NearestGenericFieldInterp> Ptr;
+  
+  // RTTI replacement ----------------------------------------------------------
+
+  typedef NearestGenericFieldInterp class_type;
+  DEFINE_FIELD_RTTI_CONCRETE_CLASS;
+
+  static const char *staticClassName()
+  {
+    return "NearestGenericFieldInterp";
+  }
+  
+  static const char* staticClassType()
+  {
+    return ms_classType.name();
+  }
+
+  // Main methods --------------------------------------------------------------
+
+  value_type sample(const Field_T &data, const V3d &vsP) const;
+
+private:
+
+  // Static data members -------------------------------------------------------
+
+  static TemplatedFieldType<NearestGenericFieldInterp<Field_T> > ms_classType;
+  
+  // Typedefs ------------------------------------------------------------------
+
+  //! Convenience typedef for referring to base class
+  typedef RefBase base;    
+
+};
+
+//----------------------------------------------------------------------------//
+// Static data member instantiation
+//----------------------------------------------------------------------------//
+
+FIELD3D_CLASSTYPE_TEMPL_INSTANTIATION(NearestGenericFieldInterp);
 
 //----------------------------------------------------------------------------//
 // LinearGenericFieldInterp
@@ -603,6 +721,27 @@ Data_T monotonicCubicInterpolantVec(const Data_T &f1, const Data_T &f2,
 //----------------------------------------------------------------------------//
 
 template <class Data_T>
+Data_T NearestFieldInterp<Data_T>::sample(const Field<Data_T> &data, 
+                                          const V3d &vsP) const
+{
+  // Voxel centers are at .5 coordinates
+  // Nearest neighbour
+  V3i c(static_cast<int>(floor(vsP.x)),
+        static_cast<int>(floor(vsP.y)),
+        static_cast<int>(floor(vsP.z)));
+
+  // Clamp the indexing coordinates
+  const Box3i &dataWindow = data.dataWindow();        
+  c.x = std::max(dataWindow.min.x, std::min(c.x, dataWindow.max.x));
+  c.y = std::max(dataWindow.min.y, std::min(c.y, dataWindow.max.y));
+  c.z = std::max(dataWindow.min.z, std::min(c.z, dataWindow.max.z));
+    
+  return static_cast<Data_T>(data.value(c.x, c.y, c.z));
+}
+
+//----------------------------------------------------------------------------//
+
+template <class Data_T>
 Data_T LinearFieldInterp<Data_T>::sample(const Field<Data_T> &data, 
                                          const V3d &vsP) const
 {
@@ -764,6 +903,31 @@ Data_T CubicFieldInterp<Data_T>::sample(const Field<Data_T> &data,
   Data_T z0 = monotonicCubicInterpolant(y1, y2, y3, y4, t.x);
 
   return z0;
+}
+
+//----------------------------------------------------------------------------//
+
+template <class Field_T>
+typename Field_T::value_type
+NearestGenericFieldInterp<Field_T>::sample(const Field_T &data, 
+                                           const V3d &vsP) const
+{
+  typedef typename Field_T::value_type Data_T;
+
+  // Pixel centers are at .5 coordinates
+  // Nearest neighbour
+  V3i c(static_cast<int>(floor(vsP.x)), 
+        static_cast<int>(floor(vsP.y)), 
+        static_cast<int>(floor(vsP.z)));
+
+  const Box3i &dataWindow = data.dataWindow();        
+
+  // Clamp the coordinates
+  c.x = std::min(dataWindow.max.x, std::max(dataWindow.min.x, c.x));
+  c.y = std::min(dataWindow.max.y, std::max(dataWindow.min.y, c.y));
+  c.z = std::min(dataWindow.max.z, std::max(dataWindow.min.z, c.z));
+
+  return static_cast<Data_T>(data.fastValue(c.x, c.y, c.z));
 }
 
 //----------------------------------------------------------------------------//

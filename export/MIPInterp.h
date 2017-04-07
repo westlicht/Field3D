@@ -54,7 +54,91 @@
 FIELD3D_NAMESPACE_OPEN
 
 //----------------------------------------------------------------------------//
-// MIPInterp 
+// MIPNearestInterp 
+//----------------------------------------------------------------------------//
+
+template <typename MIPField_T>
+class MIPNearestInterp : boost::noncopyable
+{
+public:
+
+  // Typedefs ---
+
+  typedef typename MIPField_T::NestedType  FieldType;
+  typedef typename FieldType::NearestInterp NearestInterpType;
+  typedef typename FieldType::value_type   value_type;
+
+  // Ctors ---
+
+  //! Must be constructed with a MIP field to operate on
+  MIPNearestInterp(const MIPField_T &mip);
+
+  // Main methods ---
+
+  //! Performs interpolation. A MIP field interpolation requires a spot
+  //! size (which may be zero, forcing a lookup in the 0-level field).
+  value_type sample(const V3d &vsP, const float wsSpotSize) const;
+
+private:
+
+  // Data members ---
+
+  //! Const reference to MIP field
+  const MIPField_T& m_mip;
+  //! Min world space voxel size for each MIP level
+  std::vector<float> m_wsVoxelSize;
+  //! Nearest interpolator
+  NearestInterpType m_interp;
+
+};
+
+//----------------------------------------------------------------------------//
+// MIPNearestInterp implementations
+//----------------------------------------------------------------------------//
+
+template <typename MIPField_T>
+MIPNearestInterp<MIPField_T>::MIPNearestInterp(const MIPField_T &mip)
+  : m_mip(mip)
+{
+  // Base voxel size (represents finest level)
+  const V3f   wsVoxelSize    = mip.mapping()->wsVoxelSize(0, 0, 0);
+  const float wsMinVoxelSize = 
+    std::min(std::min(wsVoxelSize.x, wsVoxelSize.y), wsVoxelSize.z);
+  // All subsequent levels are a 2x mult on the base voxel size
+  for (size_t i = 0, end = mip.numLevels(); i < end; ++i) {
+    const float factor = std::pow(2.0f, static_cast<float>(i));
+    m_wsVoxelSize.push_back(wsMinVoxelSize * factor);
+  }
+}
+
+//----------------------------------------------------------------------------//
+
+template <typename MIPField_T>
+typename MIPNearestInterp<MIPField_T>::value_type
+MIPNearestInterp<MIPField_T>::sample(const V3d &vsP, 
+                                    const float wsSpotSize) const
+{
+  const size_t numLevels = m_mip.numLevels();
+  // First case, spot size smaller than first level
+  if (wsSpotSize <= m_wsVoxelSize[0]) {
+    return m_interp.sample(*m_mip.rawMipLevel(0), vsP);
+  }
+  // Check in-between sizes
+  for (size_t i = 0, end = numLevels - 1; i < end; ++i) {
+    if (wsSpotSize <= 0.5f * (m_wsVoxelSize[i] + m_wsVoxelSize[i + 1])) {
+      V3f mipVsP;
+      m_mip.getVsMIPCoord(vsP, i, mipVsP);
+      return m_interp.sample(*m_mip.rawMipLevel(i), mipVsP);
+    }
+  }
+  // Final case, spot size larger or equal to highest level
+  V3f mipVsP;
+  m_mip.getVsMIPCoord(vsP, numLevels - 1, mipVsP);
+  return m_interp.sample(*m_mip.rawMipLevel(numLevels - 1), mipVsP);
+}
+
+//----------------------------------------------------------------------------//
+// MIPLinearInterp 
 //----------------------------------------------------------------------------//
 
 template <typename MIPField_T>

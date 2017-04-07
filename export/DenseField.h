@@ -61,6 +61,8 @@ FIELD3D_NAMESPACE_OPEN
 //----------------------------------------------------------------------------//
 
 template <class Field_T>
+class NearestGenericFieldInterp;
+template <class Field_T>
 class LinearGenericFieldInterp;
 template <class Field_T>
 class CubicGenericFieldInterp; 
@@ -92,6 +94,7 @@ public:
   typedef boost::intrusive_ptr<DenseField> Ptr;
   typedef std::vector<Ptr> Vec;
 
+  typedef LinearGenericFieldInterp<DenseField<Data_T> > NearestInterp;
   typedef LinearGenericFieldInterp<DenseField<Data_T> > LinearInterp;
   typedef CubicGenericFieldInterp<DenseField<Data_T> > CubicInterp;
 
