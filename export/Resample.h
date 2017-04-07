@@ -513,7 +513,7 @@ namespace detail {
   {
     using namespace detail;
   
-    typedef typename Field_T::value_type T;
+    // typedef typename Field_T::value_type T;
 
     if (!src.dataWindow().hasVolume()) {
       return false;

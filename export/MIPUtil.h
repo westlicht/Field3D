@@ -359,7 +359,7 @@ namespace detail {
     using namespace std;
 
     // To ensure we don't sample outside source data
-    Box3i srcDw = src.dataWindow();
+    // Box3i srcDw = src.dataWindow();
 
     // Compute new res
     V3i res;
@@ -492,7 +492,7 @@ makeMIP(const typename MIPField_T::NestedType &base, const int minSize,
 {
   using namespace Field3D::detail;
 
-  typedef typename MIPField_T::value_type    Data_T;
+  // typedef typename MIPField_T::value_type    Data_T;
   typedef typename MIPField_T::NestedType    Src_T;
   typedef typename Src_T::Ptr                SrcPtr;
   typedef typename MIPField_T::Ptr           MIPPtr;
