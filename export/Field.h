@@ -439,6 +439,13 @@ public:
   //! subset)
   const_iterator cend(const Box3i &subset) const;
 
+  // Background value ----------------------------------------------------------
+
+  //! Returns the background value.
+  const Data_T &backgroundValue() const;
+  //! Sets the background value.
+  void setBackgroundValue(Data_T value);
+
   // To be implemented by subclasses -------------------------------------------
 
   //! Read access to a voxel. The coordinates are in integer voxel space . 
@@ -449,11 +456,18 @@ public:
   //! as a non-virtual function.
   virtual Data_T value(int i, int j, int k) const = 0;
 
+  //! Same as above but return background value if index is outside of defined
+  //! range.
+  virtual Data_T valueOrBackground(int i, int j, int k) const = 0;
+
   // Other member functions ----------------------------------------------------
 
   virtual std::string dataTypeString() const 
   { return DataTypeTraits<Data_T>::name(); }
 
+protected:
+
+  Data_T m_backgroundValue = Data_T(0);
 
 private:
 
@@ -605,6 +619,22 @@ Field<Data_T>::cend(const Box3i &subset) const
   return const_iterator(*this, subset, V3i(subset.min.x, 
                                            subset.min.y,
                                            subset.max.z + 1));
+}
+
+//----------------------------------------------------------------------------//
+
+template <class Data_T>
+const Data_T &Field<Data_T>::backgroundValue() const
+{
+  return m_backgroundValue;
+}
+
+//----------------------------------------------------------------------------//
+
+template <class Data_T>
+void Field<Data_T>::setBackgroundValue(Data_T value)
+{
+  m_backgroundValue = value;
 }
 
 //----------------------------------------------------------------------------//

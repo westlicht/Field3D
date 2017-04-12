@@ -144,6 +144,7 @@ public:
 
   //! \note This returns the voxel-centered interpolated value
   virtual Data_T value(int i, int j, int k) const;
+  virtual Data_T valueOrBackground(int i, int j, int k) const;
   virtual long long int memSize() const;
 
   //! \}
@@ -628,6 +629,14 @@ inline void MACField<Data_T>::clear(const Data_T &value)
 
 template <class Data_T>
 Data_T MACField<Data_T>::value(int i, int j, int k) const
+{
+  return Data_T(uCenter(i, j, k), vCenter(i, j, k), wCenter(i, j, k));
+}
+
+//----------------------------------------------------------------------------//
+
+template <class Data_T>
+Data_T MACField<Data_T>::valueOrBackground(int i, int j, int k) const
 {
   return Data_T(uCenter(i, j, k), vCenter(i, j, k), wCenter(i, j, k));
 }

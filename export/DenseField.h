@@ -127,6 +127,7 @@ public:
   //! \name From Field
   //! \{  
   virtual Data_T value(int i, int j, int k) const;
+  virtual Data_T valueOrBackground(int i, int j, int k) const;
   virtual long long int memSize() const;
   //! \}
 
@@ -156,6 +157,7 @@ public:
 
   //! Read access to voxel. Notice that this is non-virtual.
   const Data_T& fastValue(int i, int j, int k) const;
+  const Data_T& fastValueOrBackground(int i, int j, int k) const;
   //! Write access to voxel. Notice that this is non-virtual.
   Data_T& fastLValue(int i, int j, int k);
 
@@ -501,6 +503,14 @@ Data_T DenseField<Data_T>::value(int i, int j, int k) const
 //----------------------------------------------------------------------------//
 
 template <class Data_T>
+Data_T DenseField<Data_T>::valueOrBackground(int i, int j, int k) const
+{
+  return fastValueOrBackground(i, j, k);
+}
+
+//----------------------------------------------------------------------------//
+
+template <class Data_T>
 long long int DenseField<Data_T>::memSize() const
 { 
   long long int superClassMemSize = base::memSize();
@@ -527,6 +537,24 @@ const Data_T& DenseField<Data_T>::fastValue(int i, int j, int k) const
   assert (j <= base::m_dataWindow.max.y);
   assert (k >= base::m_dataWindow.min.z);
   assert (k <= base::m_dataWindow.max.z);
+  // Add crop window offset
+  i -= base::m_dataWindow.min.x;
+  j -= base::m_dataWindow.min.y;
+  k -= base::m_dataWindow.min.z;
+  // Access data
+  return m_data[i + j * m_memSize.x + k * m_memSizeXY];
+}
+
+//----------------------------------------------------------------------------//
+
+template <class Data_T>
+const Data_T& DenseField<Data_T>::fastValueOrBackground(int i, int j, int k) const
+{
+  if (i < base::m_dataWindow.min.x || i > base::m_dataWindow.max.x ||
+      j < base::m_dataWindow.min.y || j > base::m_dataWindow.max.y ||
+      k < base::m_dataWindow.min.z || k > base::m_dataWindow.max.z) {
+    return base::m_backgroundValue;
+  }
   // Add crop window offset
   i -= base::m_dataWindow.min.x;
   j -= base::m_dataWindow.min.y;

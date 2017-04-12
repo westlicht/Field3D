@@ -166,6 +166,7 @@ public:
   //! \{  
   //! For a MIP field, the common value() call accesses data at level 0 only.
   virtual Data_T value(int i, int j, int k) const;
+  virtual Data_T valueOrBackground(int i, int j, int k) const;
   virtual size_t voxelCount() const;
   //! \}
 
@@ -197,6 +198,7 @@ public:
 
   //! Read access to voxel at a given MIP level. 
   Data_T fastMipValue(size_t level, int i, int j, int k) const;
+  Data_T fastMipValueOrBackground(size_t level, int i, int j, int k) const;
 
   // From FieldBase ------------------------------------------------------------
 
@@ -517,6 +519,15 @@ MIPField<Field_T>::value(int i, int j, int k) const
 //----------------------------------------------------------------------------//
 
 template <class Field_T>
+typename MIPField<Field_T>::Data_T 
+MIPField<Field_T>::valueOrBackground(int i, int j, int k) const
+{
+  return fastMipValueOrBackground(0, i, j, k);
+}
+
+//----------------------------------------------------------------------------//
+
+template <class Field_T>
 size_t
 MIPField<Field_T>::voxelCount() const
 {
@@ -643,6 +654,21 @@ MIPField<Field_T>::fastMipValue(size_t level, int i, int j, int k) const
   }
   // Read from given level
   return m_rawFields[level]->fastValue(i, j, k);
+}
+
+//----------------------------------------------------------------------------//
+
+template <class Field_T>
+typename MIPField<Field_T>::Data_T 
+MIPField<Field_T>::fastMipValueOrBackground(size_t level, int i, int j, int k) const
+{
+  assert(level < base::m_numLevels);
+  // Ensure level is loaded.
+  if (!m_rawFields[level]) {
+    loadLevelFromDisk(level);
+  }
+  // Read from given level
+  return m_rawFields[level]->fastValueOrBackground(i, j, k);
 }
 
 //----------------------------------------------------------------------------//

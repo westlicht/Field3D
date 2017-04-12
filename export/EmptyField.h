@@ -118,6 +118,7 @@ public:
   //! \name From Field
   //! \{  
   virtual Data_T value(int i, int j, int k) const;
+  virtual Data_T valueOrBackground(int i, int j, int k) const;
   virtual long long int memSize() const;
   //! \}
 
@@ -204,6 +205,25 @@ Data_T EmptyField<Data_T>::value(int i, int j, int k) const
   assert (j <= base::m_dataWindow.max.y);
   assert (k >= base::m_dataWindow.min.z);
   assert (k <= base::m_dataWindow.max.z);
+
+  UNUSED(i);
+  UNUSED(j);
+  UNUSED(k);
+
+  // Access data
+  return m_default;
+}
+
+//----------------------------------------------------------------------------//
+
+template <class Data_T>
+Data_T EmptyField<Data_T>::valueOrBackground(int i, int j, int k) const
+{
+  if (i < base::m_dataWindow.min.x || i > base::m_dataWindow.max.x ||
+      j < base::m_dataWindow.min.y || j > base::m_dataWindow.max.y ||
+      k < base::m_dataWindow.min.z || k > base::m_dataWindow.max.z) {
+    return base::m_backgroundValue;
+  }
 
   UNUSED(i);
   UNUSED(j);

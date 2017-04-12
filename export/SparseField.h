@@ -131,6 +131,23 @@ public:
 
     const Box3i &dataWindow = field.dataWindow();
 
+    if (c1.x < dataWindow.min.x || c1.x > dataWindow.max.x ||
+        c1.y < dataWindow.min.y || c1.y > dataWindow.max.y ||
+        c1.z < dataWindow.min.z || c1.z > dataWindow.max.z ||
+        c2.x < dataWindow.min.x || c2.x > dataWindow.max.x ||
+        c2.y < dataWindow.min.y || c2.y > dataWindow.max.y ||
+        c2.z < dataWindow.min.z || c2.z > dataWindow.max.z) {
+        return static_cast<Data_T>
+          (f1.x * (f1.y * (f1.z * field.fastValueOrBackground(c1.x, c1.y, c1.z) +
+                           f2.z * field.fastValueOrBackground(c1.x, c1.y, c2.z)) +
+                   f2.y * (f1.z * field.fastValueOrBackground(c1.x, c2.y, c1.z) +
+                           f2.z * field.fastValueOrBackground(c1.x, c2.y, c2.z))) +
+           f2.x * (f1.y * (f1.z * field.fastValueOrBackground(c2.x, c1.y, c1.z) +
+                           f2.z * field.fastValueOrBackground(c2.x, c1.y, c2.z)) +
+                   f2.y * (f1.z * field.fastValueOrBackground(c2.x, c2.y, c1.z) +
+                           f2.z * field.fastValueOrBackground(c2.x, c2.y, c2.z))));
+    }
+
     // Clamp the coordinates
     c1.x = std::min(dataWindow.max.x, std::max(dataWindow.min.x, c1.x));
     c1.y = std::min(dataWindow.max.y, std::max(dataWindow.min.y, c1.y));
@@ -488,6 +505,7 @@ public:
   //! \name From Field
   //! \{
   virtual Data_T value(int i, int j, int k) const;
+  virtual Data_T valueOrBackground(int i, int j, int k) const;
   virtual long long int memSize() const;
   virtual size_t voxelCount() const;
   //! \}
@@ -503,6 +521,7 @@ public:
 
   //! Read access to voxel. Notice that this is non-virtual.
   Data_T fastValue(int i, int j, int k) const;
+  Data_T fastValueOrBackground(int i, int j, int k) const;
   //! Write access to voxel. Notice that this is non-virtual.
   Data_T& fastLValue(int i, int j, int k);
 
@@ -1606,6 +1625,14 @@ Data_T SparseField<Data_T>::value(int i, int j, int k) const
 //----------------------------------------------------------------------------//
 
 template <class Data_T>
+Data_T SparseField<Data_T>::valueOrBackground(int i, int j, int k) const
+{
+  return fastValueOrBackground(i, j, k);
+}
+
+//----------------------------------------------------------------------------//
+
+template <class Data_T>
 Data_T& SparseField<Data_T>::lvalue(int i, int j, int k)
 {
   return fastLValue(i, j, k);
@@ -1647,6 +1674,17 @@ Data_T SparseField<Data_T>::fastValue(int i, int j, int k) const
   } else {
     return block.emptyValue;
   }
+}
+
+template <class Data_T>
+Data_T SparseField<Data_T>::fastValueOrBackground(int i, int j, int k) const
+{
+  if (i < base::m_dataWindow.min.x || i > base::m_dataWindow.max.x ||
+      j < base::m_dataWindow.min.y || j > base::m_dataWindow.max.y ||
+      k < base::m_dataWindow.min.z || k > base::m_dataWindow.max.z) {
+    return base::m_backgroundValue;
+  }
+  return fastValue(i, j, k);
 }
 
 //----------------------------------------------------------------------------//
