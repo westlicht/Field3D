@@ -75,13 +75,15 @@ V3i computeOffset(const FieldRes &f);
 template <typename MIPField_T, typename Filter_T>
 typename MIPField_T::Ptr
 makeMIP(const typename MIPField_T::NestedType &base, const int minSize,
-        const V3i &offset, const size_t numThreads);
+        const V3i &offset, const size_t numThreads,
+        const Filter_T &filter = Filter_T());
 
 //! Constructs a MIP representation of the given field.
 template <typename MIPField_T, typename Filter_T>
 typename MIPField_T::Ptr
 makeMIP(const typename MIPField_T::NestedType &base, const int minSize,
-        const size_t numThreads);
+        const size_t numThreads,
+        const Filter_T &filter = Filter_T());
 
 //----------------------------------------------------------------------------//
 // Implementation details
@@ -92,6 +94,7 @@ namespace detail {
   //--------------------------------------------------------------------------//
 
   extern const std::string k_mipOffsetStr;
+  extern const std::string k_mipPaddingStr;
 
   //--------------------------------------------------------------------------//
 
@@ -475,12 +478,12 @@ namespace detail {
 template <typename MIPField_T, typename Filter_T>
 typename MIPField_T::Ptr
 makeMIP(const typename MIPField_T::NestedType &base, const int minSize,
-        const size_t numThreads)
+        const size_t numThreads, const Filter_T &filter)
 {
   // By default, there is no offset
   const V3i zero(0);
   // Call out to perform actual work
-  return makeMIP<MIPField_T, Filter_T>(base, minSize, zero, numThreads);
+  return makeMIP<MIPField_T, Filter_T>(base, minSize, zero, numThreads, filter);
 }
 
 //----------------------------------------------------------------------------//
@@ -488,7 +491,7 @@ makeMIP(const typename MIPField_T::NestedType &base, const int minSize,
 template <typename MIPField_T, typename Filter_T>
 typename MIPField_T::Ptr
 makeMIP(const typename MIPField_T::NestedType &base, const int minSize,
-        const V3i &baseOffset, const size_t numThreads)
+        const V3i &baseOffset, const size_t numThreads, const Filter_T &filter)
 {
   using namespace Field3D::detail;
 
@@ -501,6 +504,8 @@ makeMIP(const typename MIPField_T::NestedType &base, const int minSize,
   if (base.extents() != base.dataWindow()) {
     return MIPPtr();
   }
+
+  const int padding = static_cast<int>(std::ceil(filter.support()));
   
   // Initialize output vector with base resolution
   SrcVec result;
@@ -517,7 +522,7 @@ makeMIP(const typename MIPField_T::NestedType &base, const int minSize,
     // Perform filtering
     SrcPtr nextField(new Src_T);
     mipResample(base, *result.back(), *nextField, level, offset, 
-                Filter_T(), numThreads);
+                filter, numThreads);
     // Add to vector of filtered fields
     result.push_back(nextField);
     // Set up for next iteration
@@ -538,6 +543,7 @@ makeMIP(const typename MIPField_T::NestedType &base, const int minSize,
   mipField->attribute = base.attribute;
   mipField->copyMetadata(base);
   mipField->setMIPOffset(baseOffset);
+  mipField->setMIPPadding(padding);
   mipField->setup(result);
 
   return mipField;

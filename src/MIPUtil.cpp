@@ -64,6 +64,7 @@ namespace detail {
   //--------------------------------------------------------------------------//
 
   const std::string k_mipOffsetStr = "mipoffset";
+  const std::string k_mipPaddingStr = "mippadding";
 
   //--------------------------------------------------------------------------//
 

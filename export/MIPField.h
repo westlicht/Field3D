@@ -563,6 +563,9 @@ void MIPField<Field_T>::mappingChanged()
   const V3i offset = 
     base::metadata().vecIntMetadata(detail::k_mipOffsetStr, V3i(0));
   base::setMIPOffset(offset);
+  const int padding =
+    base::metadata().intMetadata(detail::k_mipPaddingStr, 0);
+  base::setMIPPadding(padding);
 
   V3i baseRes = base::dataWindow().size() + V3i(1);
   if (m_fields[0]) {

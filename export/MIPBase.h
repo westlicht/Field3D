@@ -179,6 +179,11 @@ public:
   //! Returns the base MIP offset
   const V3i& mipOffset() const
   { return m_mipOffset; }
+  //! Sets the padding added to each new MIP level to account for larger kernels.
+  void setMIPPadding(const int padding);
+  //! Returns the MIP level padding.
+  const int mipPadding() const
+  { return m_mipPadding; }
 
 protected:
 
@@ -202,6 +207,10 @@ protected:
   //! \note This is stored on disk in metadata, and is updated by
   //! the standard I/O routines.
   V3i m_mipOffset;
+  //! Padding added to each new MIP level to account for larger kernels.
+  //! \note This is stored on disk in metadata, and is updated by
+  //! the standard I/O routines.
+  int m_mipPadding;
 
 };
 
@@ -211,7 +220,7 @@ protected:
 
 template <typename Data_T>
 MIPBase<Data_T>::MIPBase()
-  : m_numLevels(1), m_lowestLevel(0), m_mipOffset(0)
+  : m_numLevels(1), m_lowestLevel(0), m_mipOffset(0), m_mipPadding(0)
 {
   
 }
@@ -231,6 +240,15 @@ void MIPBase<Data_T>::setMIPOffset(const V3i &offset)
 { 
   this->metadata().setVecIntMetadata(detail::k_mipOffsetStr, offset);
   m_mipOffset = offset; 
+}
+
+//----------------------------------------------------------------------------//
+
+template <typename Data_T>
+void MIPBase<Data_T>::setMIPPadding(const int padding)
+{ 
+  this->metadata().setIntMetadata(detail::k_mipPaddingStr, padding);
+  m_mipPadding = padding; 
 }
 
 //----------------------------------------------------------------------------//
