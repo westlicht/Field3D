@@ -511,14 +511,14 @@ namespace detail {
 
   //! Constant size for all dense fields
   template <typename Data_T>
-  size_t threadingBlockSize(const DenseField<Data_T> & /* f */)
+  size_t threadingBlockSizeResample(const DenseField<Data_T> & /* f */)
   {
     return 16;
   }
   
   //! Use block size for sparse fields
   template <typename Data_T>
-  size_t threadingBlockSize(const SparseField<Data_T> &f)
+  size_t threadingBlockSizeResample(const SparseField<Data_T> &f)
   {
     return f.blockSize();
   }
@@ -526,10 +526,10 @@ namespace detail {
   //--------------------------------------------------------------------------//
 
   template <typename Data_T>
-  bool checkInputEmpty(const SparseField<Data_T> &src, 
-                       const SparseField<Data_T> &/*tgt*/, 
-                       const Box3i &tgtBox, const float support,
-                       const size_t dim)
+  bool checkInputEmptyResample(const SparseField<Data_T> &src, 
+                               const SparseField<Data_T> &/*tgt*/, 
+                               const Box3i &tgtBox, const float support,
+                                size_t dim)
   {
     const int intSupport = static_cast<int>(std::ceil(support * 0.5));
     const int pad        = std::max(0, intSupport);
@@ -537,8 +537,8 @@ namespace detail {
     tgtBoxPad.min[dim]  -= pad;
     tgtBoxPad.max[dim]  += pad;
     Box3i     srcBoxPad  = tgtBoxPad;
-    srcBoxPad.min[dim]  *= 2;
-    srcBoxPad.max[dim]  *= 2;
+    // srcBoxPad.min[dim]  *= 2;
+    // srcBoxPad.max[dim]  *= 2;
 
     // Get the block coordinates
     const Box3i dbsBounds = blockCoords(clipBounds(srcBoxPad, src.dataWindow()),
@@ -561,6 +561,17 @@ namespace detail {
 
     // No hits. Empty
     return true;
+  }
+
+  //--------------------------------------------------------------------------//
+
+  //! Fallback version always returns false
+  template <typename Field_T>
+  bool checkInputEmptyResample(const Field_T &/*src*/, const Field_T &/*tgt*/, 
+                               const Box3i &/*tgtBox*/, const float /*support*/,
+                               const size_t /*dim*/)
+  {
+    return false;
   }
 
   //--------------------------------------------------------------------------//
@@ -614,7 +625,8 @@ namespace detail {
         // Grab the bounds
         const Box3i box =  m_blocks[idx];
         // Early exit if input blocks are all empty
-        if (!detail::checkInputEmpty(m_src, m_tgt, box, support, m_dim)) {
+        if (!detail::checkInputEmptyResample(m_src, m_tgt, box, support, m_dim)) {
+        // if (true) {
           // For each output voxel
           for (int k = box.min.z; k <= box.max.z; ++k) {
             for (int j = box.min.y; j <= box.max.y; ++j) {
@@ -689,6 +701,12 @@ namespace detail {
             }
           }
         }
+        // Get next index
+        {
+          boost::mutex::scoped_lock lock(m_mutex);
+          idx = m_nextIdx;
+          m_nextIdx++;
+        }
       }
     }
 
@@ -718,7 +736,7 @@ namespace detail {
     tgt.setSize(newRes);
 
     // Determine granularity
-    const size_t blockSize = threadingBlockSize(src);
+    const size_t blockSize = threadingBlockSizeResample(src);
 
     // Build block list
     std::vector<Box3i> blocks;

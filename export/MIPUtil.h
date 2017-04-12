@@ -115,7 +115,7 @@ namespace detail {
                                 const V3i &add);
 
   //--------------------------------------------------------------------------//
-#if 0
+
   //! Constant size for all dense fields
   template <typename Data_T>
   size_t threadingBlockSize(const DenseField<Data_T> & /* f */)
@@ -169,7 +169,7 @@ namespace detail {
     // No hits. Empty
     return true;
   }
-#endif
+
   //--------------------------------------------------------------------------//
 
   //! Fallback version always returns false
