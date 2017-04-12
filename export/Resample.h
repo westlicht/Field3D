@@ -44,6 +44,11 @@
 #ifndef _INCLUDED_Field3D_Resample_H_
 #define _INCLUDED_Field3D_Resample_H_
 
+#include <vector>
+
+#include <boost/thread/thread.hpp>
+#include <boost/thread/mutex.hpp>
+
 #include "DenseField.h"
 #include "SparseField.h"
 
@@ -78,7 +83,7 @@ FIELD3D_NAMESPACE_OPEN
 //! This should 
 template <typename Field_T, typename FilterOp_T>
 bool resample(const Field_T &src, Field_T &tgt, const V3i &newRes,
-              const FilterOp_T &filter);
+              const FilterOp_T &filter, const size_t numThreads = 1);
 
 //----------------------------------------------------------------------------//
 // Filter
@@ -504,12 +509,262 @@ namespace detail {
 
   //--------------------------------------------------------------------------//
 
+  //! Constant size for all dense fields
+  template <typename Data_T>
+  size_t threadingBlockSize(const DenseField<Data_T> & /* f */)
+  {
+    return 16;
+  }
+  
+  //! Use block size for sparse fields
+  template <typename Data_T>
+  size_t threadingBlockSize(const SparseField<Data_T> &f)
+  {
+    return f.blockSize();
+  }
+
+  //--------------------------------------------------------------------------//
+
+  template <typename Data_T>
+  bool checkInputEmpty(const SparseField<Data_T> &src, 
+                       const SparseField<Data_T> &/*tgt*/, 
+                       const Box3i &tgtBox, const float support,
+                       const size_t dim)
+  {
+    const int intSupport = static_cast<int>(std::ceil(support * 0.5));
+    const int pad        = std::max(0, intSupport);
+    Box3i     tgtBoxPad  = tgtBox;
+    tgtBoxPad.min[dim]  -= pad;
+    tgtBoxPad.max[dim]  += pad;
+    Box3i     srcBoxPad  = tgtBoxPad;
+    srcBoxPad.min[dim]  *= 2;
+    srcBoxPad.max[dim]  *= 2;
+
+    // Get the block coordinates
+    const Box3i dbsBounds = blockCoords(clipBounds(srcBoxPad, src.dataWindow()),
+                                        &src);
+
+    static boost::mutex mutex;
+    boost::mutex::scoped_lock lock(mutex);
+
+    // Check all blocks
+    for (int k = dbsBounds.min.z; k <= dbsBounds.max.z; ++k) {
+      for (int j = dbsBounds.min.y; j <= dbsBounds.max.y; ++j) {
+        for (int i = dbsBounds.min.x; i <= dbsBounds.max.x; ++i) {
+          if (src.blockIsAllocated(i, j, k) ||
+              src.getBlockEmptyValue(i, j, k) != static_cast<Data_T>(0)) {
+            return false;
+          }
+        }
+      } 
+    }
+
+    // No hits. Empty
+    return true;
+  }
+
+  //--------------------------------------------------------------------------//
+
+  template <typename Field_T, typename FilterOp_T, bool IsAnalytic_T>
+  struct SeparableThreadOp
+  {
+    typedef typename Field_T::value_type T;
+
+    SeparableThreadOp(const Field_T &src, Field_T &tgt, 
+                      const FilterOp_T &filterOp, 
+                      const size_t dim, 
+                      const std::vector<Box3i> &blocks,
+                      size_t &nextIdx, boost::mutex &mutex)
+      : m_src(src),
+        m_tgt(tgt),
+        m_filterOp(filterOp), 
+        m_dim(dim),
+        m_blocks(blocks),
+        m_nextIdx(nextIdx),
+        m_mutex(mutex),
+        m_numBlocks(blocks.size())
+    {
+    }
+
+    void operator() () {
+      typedef typename Field_T::value_type T;
+
+      const V3i   srcRes    = m_src.dataWindow().size() + V3i(1);
+      const V3i   newRes    = m_tgt.dataWindow().size() + V3i(1);
+      const float srcDomain = V3f(srcRes)[m_dim];
+      const float tgtDomain = V3f(newRes)[m_dim];
+      const float srcSize   = 1.0 / srcDomain;
+      const float tgtSize   = 1.0 / tgtDomain;
+
+      // Filter info
+      const float support = m_filterOp.support();
+
+      // Check if we're up-res'ing
+      const bool doUpres = newRes[m_dim] > srcRes[m_dim] ? 1 : 0;
+
+      // Get next index to process
+      size_t idx;
+      {
+        boost::mutex::scoped_lock lock(m_mutex);
+        idx = m_nextIdx;
+        m_nextIdx++;
+      }
+      // Keep going while there is data to process
+      while (idx < m_numBlocks) {
+        // Grab the bounds
+        const Box3i box =  m_blocks[idx];
+        // Early exit if input blocks are all empty
+        if (!detail::checkInputEmpty(m_src, m_tgt, box, support, m_dim)) {
+          // For each output voxel
+          for (int k = box.min.z; k <= box.max.z; ++k) {
+            for (int j = box.min.y; j <= box.max.y; ++j) {
+              for (int i = box.min.x; i <= box.max.x; ++i) {
+                T accumValue(m_filterOp.initialValue());
+                if (IsAnalytic_T) {
+                  // Current position in target coordinates
+                  const float tgtP = discToCont(V3i(i, j ,k)[m_dim]);
+                  // Transform support to source coordinates
+                  std::pair<int, int> srcInterval = 
+                    srcSupportBBox(tgtP, support, doUpres, srcSize, tgtSize);
+                  // Clip against new data window
+                  srcInterval.first = 
+                    std::max(srcInterval.first, m_src.dataWindow().min[m_dim]);
+                  srcInterval.second = 
+                    std::min(srcInterval.second, m_src.dataWindow().max[m_dim]);
+                  // For each input voxel
+                  for (int s = srcInterval.first; s <= srcInterval.second; ++s) {
+                    // Index
+                    const int xIdx = m_dim == 0 ? s : i;
+                    const int yIdx = m_dim == 1 ? s : j;
+                    const int zIdx = m_dim == 2 ? s : k;
+                    // Value
+                    const T value = m_src.fastValue(xIdx, yIdx, zIdx);
+                    // Weights
+                    const float srcP   = discToCont(V3i(xIdx, yIdx, zIdx)[m_dim]);
+                    const float dist   = getDist(doUpres, srcP, tgtP, srcSize, tgtSize);
+                    const float weight = m_filterOp.eval(dist);
+                    // Update
+                    if (weight > 0.0f) {
+                      FilterOp_T::op(accumValue, value);
+                    }
+                  }
+                  // Update final value
+                  if (accumValue != static_cast<T>(m_filterOp.initialValue())) {
+                    m_tgt.fastLValue(i, j, k) = accumValue;
+                  }
+                } else {
+                  float accumWeight = 0.0f;
+                  // Current position in target coordinates
+                  const float tgtP = discToCont(V3i(i, j ,k)[m_dim]);
+                  // Transform support to source coordinates
+                  std::pair<int, int> srcInterval = 
+                    srcSupportBBox(tgtP, support, doUpres, srcSize, tgtSize);
+                  // Clip against new data window
+                  srcInterval.first = 
+                    std::max(srcInterval.first, m_src.dataWindow().min[m_dim]);
+                  srcInterval.second = 
+                    std::min(srcInterval.second, m_src.dataWindow().max[m_dim]);
+                  // For each input voxel
+                  for (int s = srcInterval.first; s <= srcInterval.second; ++s) {
+                    // Index
+                    const int xIdx = m_dim == 0 ? s : i;
+                    const int yIdx = m_dim == 1 ? s : j;
+                    const int zIdx = m_dim == 2 ? s : k;
+                    // Value
+                    const T value      = m_src.fastValue(xIdx, yIdx, zIdx);
+                    // Weights
+                    const float srcP   = discToCont(V3i(xIdx, yIdx, zIdx)[m_dim]);
+                    const float dist   = getDist(doUpres, srcP, tgtP, srcSize, tgtSize);
+                    const float weight = m_filterOp.eval(dist);
+                    // Update
+                    accumWeight += weight;
+                    accumValue  += value * weight;
+                  }
+                  // Update final value
+                  if (accumWeight > 0.0f && accumValue != static_cast<T>(0.0)) {
+                    m_tgt.fastLValue(i, j, k) = accumValue / accumWeight;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+  private:
+
+    // Data members ---
+
+    const Field_T            &m_src;
+    Field_T                  &m_tgt;
+    const FilterOp_T         &m_filterOp;
+    const size_t              m_dim;
+    const std::vector<Box3i> &m_blocks;
+    size_t                   &m_nextIdx;
+    boost::mutex             &m_mutex;
+    const size_t              m_numBlocks;
+    
+  };
+
+  //--------------------------------------------------------------------------//
+
+  template <typename Field_T, typename FilterOp_T, bool IsAnalytic_T>
+  void separableThreaded(const Field_T &src, Field_T &tgt, const V3i &newRes,
+                         const FilterOp_T &filterOp, const size_t dim,
+                         const size_t numThreads)
+  {
+    // Resize the target
+    tgt.setSize(newRes);
+
+    // Determine granularity
+    const size_t blockSize = threadingBlockSize(src);
+
+    // Build block list
+    std::vector<Box3i> blocks;
+    for (int k = 0; k < newRes.z; k += blockSize) {
+      for (int j = 0; j < newRes.y; j += blockSize) {
+        for (int i = 0; i < newRes.x; i += blockSize) {
+          Box3i box;
+          // Initialize block size
+          box.min = V3i(i, j, k);
+          box.max = box.min + V3i(blockSize - 1);
+          // Clip against resolution
+          box.max.x = std::min(box.max.x, newRes.x - 1);
+          box.max.y = std::min(box.max.y, newRes.y - 1);
+          box.max.z = std::min(box.max.z, newRes.z - 1);
+          // Add to list
+          blocks.push_back(box);
+        }
+      }
+    }
+
+    // Next index counter and mutex
+    size_t nextIdx = 0;
+    boost::mutex mutex;
+
+    // Launch threads ---
+
+    boost::thread_group threads;
+
+    for (size_t i = 0; i < numThreads; ++i) {
+      threads.create_thread(
+        SeparableThreadOp<Field_T, FilterOp_T, FilterOp_T::isAnalytic >
+        (src, tgt, filterOp, dim, blocks, nextIdx, mutex));
+    }
+
+    // Join
+    threads.join_all();
+  }
+
+  //--------------------------------------------------------------------------//
+
   //! Resamples the source field into the target field, using separable
   //! execution, which is faster than resample().
   //! \note The extents of the field will be reset to match the data window.
   template <typename Field_T, typename FilterOp_T>
   bool separableResample(const Field_T &src, Field_T &tgt, const V3i &newRes,
-                         const FilterOp_T &filterOp)
+                         const FilterOp_T &filterOp, const size_t numThreads)
   {
     using namespace detail;
   
@@ -532,12 +787,21 @@ namespace detail {
     V3i yRes(newRes.x, newRes.y, oldRes.z);
     V3i zRes(newRes.x, newRes.y, newRes.z);
 
-    // X axis (src into tgt)
-    separable<Field_T, FilterOp_T, FilterOp_T::isAnalytic>(src, tgt, xRes, filterOp, 0);
-    // Y axis (tgt into temp)
-    separable<Field_T, FilterOp_T, FilterOp_T::isAnalytic>(tgt, tmp, yRes, filterOp, 1);
-    // Z axis (temp into tgt)
-    separable<Field_T, FilterOp_T, FilterOp_T::isAnalytic>(tmp, tgt, zRes, filterOp, 2);
+    if (numThreads > 1) {
+      // X axis (src into tgt)
+      separableThreaded<Field_T, FilterOp_T, FilterOp_T::isAnalytic>(src, tgt, xRes, filterOp, 0, numThreads);
+      // Y axis (tgt into temp)
+      separableThreaded<Field_T, FilterOp_T, FilterOp_T::isAnalytic>(tgt, tmp, yRes, filterOp, 1, numThreads);
+      // Z axis (temp into tgt)
+      separableThreaded<Field_T, FilterOp_T, FilterOp_T::isAnalytic>(tmp, tgt, zRes, filterOp, 2, numThreads);
+    } else {
+      // X axis (src into tgt)
+      separable<Field_T, FilterOp_T, FilterOp_T::isAnalytic>(src, tgt, xRes, filterOp, 0);
+      // Y axis (tgt into temp)
+      separable<Field_T, FilterOp_T, FilterOp_T::isAnalytic>(tgt, tmp, yRes, filterOp, 1);
+      // Z axis (temp into tgt)
+      separable<Field_T, FilterOp_T, FilterOp_T::isAnalytic>(tmp, tgt, zRes, filterOp, 2);
+    }
 
     // Update final target with mapping and metadata
     tgt.name      = src.name;
@@ -558,9 +822,9 @@ namespace detail {
 
 template <typename Field_T, typename FilterOp_T>
 bool resample(const Field_T &src, Field_T &tgt, const V3i &newRes,
-              const FilterOp_T &filterOp)
+              const FilterOp_T &filterOp, const size_t numThreads)
 {
-  return detail::separableResample(src, tgt, newRes, filterOp);
+  return detail::separableResample(src, tgt, newRes, filterOp, numThreads);
 }
 
 //----------------------------------------------------------------------------//
