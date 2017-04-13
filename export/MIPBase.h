@@ -182,7 +182,7 @@ public:
   //! Sets the padding added to each new MIP level to account for larger kernels.
   void setMIPPadding(const int padding);
   //! Returns the MIP level padding.
-  const int mipPadding() const
+  int mipPadding() const
   { return m_mipPadding; }
 
 protected:
