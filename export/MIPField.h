@@ -615,6 +615,7 @@ void MIPField<Field_T>::getVsMIPCoord(const V3f &vsP, const size_t level,
                                       V3f &outVsP) const
 {
   const V3i &mipOff = base::mipOffset();
+  const int mipPad = base::mipPadding();
 
   // Compute offset of current level 
   const V3i offset((mipOff.x >> level) << level, 
@@ -625,8 +626,8 @@ void MIPField<Field_T>::getVsMIPCoord(const V3f &vsP, const size_t level,
   // to offset current level by 
   const V3f diff = offset - mipOff;
 
-  // Incorporate shift due to mip offset
-  outVsP = (vsP - diff) * pow(2.0, -static_cast<float>(level));
+  // Incorporate shift due to mip offset and padding
+  outVsP = (vsP - diff) * pow(2.0, -static_cast<float>(level)) + V3f((level > 0) ? mipPad : 0);
 }
 
 //----------------------------------------------------------------------------//

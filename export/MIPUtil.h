@@ -193,6 +193,7 @@ namespace detail {
 
     MIPSeparableThreadOp(const Field_T &src, Field_T &tgt, 
                          const size_t level, const V3i &add,
+                         const int padding,
                          const FilterOp_T &filterOp, 
                          const size_t dim, 
                          const std::vector<Box3i> &blocks,
@@ -201,7 +202,8 @@ namespace detail {
         m_tgt(tgt),
         m_filterOp(filterOp), 
         m_level(level), 
-        m_add(add), 
+        m_add(add),
+        m_padding(padding),
         m_dim(dim),
         m_blocks(blocks),
         m_nextIdx(nextIdx),
@@ -250,7 +252,8 @@ namespace detail {
                 if (IsAnalytic_T) {
                   // Transform from current point in target frame to source frame
                   const int   curTgt = V3i(i, j, k)[m_dim];
-                  const float curSrc = discToCont(curTgt) * tgtToSrcMult - m_add[m_dim];
+                  // const float curSrc = discToCont(curTgt) * tgtToSrcMult - m_add[m_dim];
+                  const float curSrc = discToCont(curTgt - m_padding) * tgtToSrcMult - m_add[m_dim] + ((m_level > 1) ? m_padding : 0);
                   // Find interval
                   int startSrc = 
                     static_cast<int>(std::floor(curSrc - support * tgtToSrcMult));
@@ -287,7 +290,8 @@ namespace detail {
                   float accumWeight  = 0.0f;
                   // Transform from current point in target frame to source frame
                   const int   curTgt = V3i(i, j, k)[m_dim];
-                  const float curSrc = discToCont(curTgt) * tgtToSrcMult - m_add[m_dim];
+                  // const float curSrc = discToCont(curTgt) * tgtToSrcMult - m_add[m_dim];
+                  const float curSrc = discToCont(curTgt - m_padding) * tgtToSrcMult - m_add[m_dim] + ((m_level > 1) ? m_padding : 0);
                   // Find interval
                   int startSrc = 
                     static_cast<int>(std::floor(curSrc - support * tgtToSrcMult));
@@ -342,6 +346,7 @@ namespace detail {
     const FilterOp_T         &m_filterOp;
     const size_t              m_level;
     const V3i                &m_add;
+    const int                 m_padding;
     const size_t              m_dim;
     const std::vector<Box3i> &m_blocks;
     size_t                   &m_nextIdx;
@@ -356,7 +361,7 @@ namespace detail {
   template <typename Field_T, typename FilterOp_T>
   void mipSeparable(const Field_T &src, Field_T &tgt, 
                     const V3i &oldRes, const V3i &newRes, const size_t level, 
-                    const V3i &add, const FilterOp_T &filterOp, 
+                    const V3i &add, const int padding, const FilterOp_T &filterOp, 
                     const size_t dim, const size_t numThreads)
   {
     using namespace std;
@@ -410,7 +415,7 @@ namespace detail {
     for (size_t i = 0; i < numThreads; ++i) {
       threads.create_thread(
         MIPSeparableThreadOp<Field_T, FilterOp_T, FilterOp_T::isAnalytic >
-        (src, tgt, level, add, filterOp, 
+        (src, tgt, level, add, padding, filterOp, 
          dim, blocks, nextIdx, mutex));
     }
 
@@ -422,7 +427,7 @@ namespace detail {
 
   template <typename Field_T, typename FilterOp_T>
   void mipResample(const Field_T &base, const Field_T &src, Field_T &tgt, 
-                   const size_t level, const V3i &offset, 
+                   const size_t level, const V3i &offset, const int padding,
                    const FilterOp_T &filterOp, 
                    const size_t numThreads)
   {
@@ -436,7 +441,7 @@ namespace detail {
     // Compute new res
     const Box3i baseDw  = base.dataWindow();
     const V3i   baseRes = baseDw.size() + V3i(1);
-    const V3i   newRes  = mipResolution(baseRes, level, add);
+    const V3i   newRes  = mipResolution(baseRes, level, add) + V3i(2 * padding);
 
     // Source res
     const Box3i srcDw  = src.dataWindow();
@@ -446,11 +451,11 @@ namespace detail {
     Field_T tmp;
 
     // X axis (src into tgt)
-    mipSeparable(src, tgt, srcRes, newRes, level, add, filterOp, 0, numThreads);
+    mipSeparable(src, tgt, srcRes, newRes, level, add, padding, filterOp, 0, numThreads);
     // Y axis (tgt into temp)
-    mipSeparable(tgt, tmp, srcRes, newRes, level, add, filterOp, 1, numThreads);
+    mipSeparable(tgt, tmp, srcRes, newRes, level, add, padding, filterOp, 1, numThreads);
     // Z axis (temp into tgt)
-    mipSeparable(tmp, tgt, srcRes, newRes, level, add, filterOp, 2, numThreads);
+    mipSeparable(tmp, tgt, srcRes, newRes, level, add, padding, filterOp, 2, numThreads);
 
     // Update final target with mapping and metadata
     tgt.name      = base.name;
@@ -505,7 +510,8 @@ makeMIP(const typename MIPField_T::NestedType &base, const int minSize,
     return MIPPtr();
   }
 
-  const int padding = static_cast<int>(std::ceil(filter.support()));
+  // apply padding for large filters
+  const int padding = filter.support() > 1.f ? static_cast<int>(std::ceil(filter.support() * 0.5)) : 0;
   
   // Initialize output vector with base resolution
   SrcVec result;
@@ -522,11 +528,11 @@ makeMIP(const typename MIPField_T::NestedType &base, const int minSize,
     // Perform filtering
     SrcPtr nextField(new Src_T);
     mipResample(base, *result.back(), *nextField, level, offset, 
-                filter, numThreads);
+                padding, filter, numThreads);
     // Add to vector of filtered fields
     result.push_back(nextField);
     // Set up for next iteration
-    res = nextField->dataWindow().size() + V3i(1);
+    res = nextField->dataWindow().size() + V3i(1) - V3i(2 * padding);
     // ... offset needs to be rounded towards negative inf, not towards zero
     for (int i = 0; i < 3; ++i) {
       if (offset[i] < 0) {

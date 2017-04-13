@@ -91,6 +91,7 @@ namespace detail {
 
     const V3i   zero   = V3i(0);
     const V3i   mipOff = base->metadata().vecIntMetadata(k_mipOffsetStr, zero);
+    const int   mipPad = level > 0 ? base->metadata().intMetadata(k_mipPaddingStr, 0) : 0;
     const float mult   = 1 << level;
     const V3i   res    = extents.size() + V3i(1);
       
@@ -132,6 +133,10 @@ namespace detail {
         wsOrigin += wsX * wsBaseVoxelSize.x * diff.x;
         wsOrigin += wsY * wsBaseVoxelSize.y * diff.y;
         wsOrigin += wsZ * wsBaseVoxelSize.z * diff.z;
+        // Origin shift due to padding
+        wsOrigin -= wsX * wsVoxelSize * mipPad;
+        wsOrigin -= wsY * wsVoxelSize * mipPad;
+        wsOrigin -= wsZ * wsVoxelSize * mipPad;
         // Mult by voxel size
         wsX *= wsVoxelSize.x * res.x;
         wsY *= wsVoxelSize.y * res.y;
